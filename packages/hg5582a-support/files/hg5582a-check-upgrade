@@ -32,6 +32,8 @@ printf '%s\n' "$log" | grep -Fq 'Manufacturer ID: 0x98, Chip ID: 0xda' ||
 	fail "Toshiba 98:da NAND evidence missing; retain cold-boot logs"
 printf '%s\n' "$log" | grep -Fq 'Toshiba NAND 256MiB' ||
 	fail "this image is for the verified 256 MiB Toshiba variant"
+printf '%s\n' "$log" | grep -Fq 'GN28L95 frontend registered, ID 0xa1, calibration ready' ||
+	fail "verified GN28L95 calibration is not ready"
 ubidev="$(nand_find_ubi ubi)"
 [ -n "$ubidev" ] || fail "UBI not attached"
 for volume in fip ubootenv ubootenv2 factory fit; do

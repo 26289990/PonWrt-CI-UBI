@@ -96,7 +96,7 @@ EPON 默认模式在 DT 中设置为 epon-10g-1g。HG5582A 专用包在空白 PO
 sh HG5582A-Toshiba-ECC8-check-upgrade.sh /tmp/ponwrt-airoha-an7581-fiberhome_hg5582a-squashfs-sysupgrade.itb
 ```
 
-脚本只读核对 Toshiba 98:da、256 MiB、ECC8/512、页面/OOB/分区和完整 UBI 基础卷，
+脚本只读核对 Toshiba 98:da、256 MiB、ECC8/512、页面/OOB/分区、GN28L95 校准就绪和完整 UBI 基础卷，
 然后执行 sysupgrade -T；任何一项失败都停止，不用强刷。
 原厂非 UBI 布局、Winbond/ECC4、缺少本机 factory 的设备不能套用此升级入口。
 升级后再次核对 ECC8、factory 哈希、正常重启和 PON 模式。
