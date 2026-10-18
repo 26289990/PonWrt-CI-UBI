@@ -47,6 +47,8 @@ XG-040G-MD 固件不能用于 ZN504XG-D，必须选择对应 profile 的镜像�
   任一机型缺镜像、错板名、哈希不符或缺关键软件包都会阻止发布。
   单组成功时，仍可在该次 Actions 下载对应的 `PonWrt-firmware-an7581` /
   `PonWrt-firmware-an7583` Artifact；诊断文件另存为 `PonWrt-diagnostics-*`。
+- 发布构建在编译前固定 `ponwrt-r<run_number>-<run_id>` tag；重试复用同一 tag，
+  发布前确认它仍指向本次 CI 提交，避免编译期间主线更新导致创建 Release 被拒绝。
 - 构建通过后发布正式 Release，并设为最新版本。通过编译与静态校验不代表所有实机都已测试。
 
 在仓库 [Releases](https://github.com/Kahen/PonWrt-CI-UBI/releases) 下载对应完整型号、变体和布局的文件。
