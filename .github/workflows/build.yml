@@ -208,6 +208,8 @@ jobs:
             openwrt/feeds-resolution.json
             openwrt/custom-package-commits.tsv
             openwrt/requested-packages-dropped.txt
+            openwrt/tmp/.packageinfo
+            openwrt/tmp/.config-package.in
             openwrt/logs/
           if-no-files-found: ignore
           include-hidden-files: true

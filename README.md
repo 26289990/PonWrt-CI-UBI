@@ -128,6 +128,7 @@ CI 为 Airoha 补齐脚本安装与页面接入，并逐个检查最终镜像中
 - 其他已请求的可选符号若被上游删除或依赖不满足，会写入
   `*-requested-packages-dropped.txt`；可选包的存在不代表已验证全部运行功能。
 - 第三方包延续原来源和更新方式，实际提交记录在每次构建产物中。
+  VIKING 仓库仅导入 `gecoosac`、`luci-app-gecoosac`、`luci-app-wolultra`，避免无关包覆盖已锁定的 feeds。
   保留的 attendedsysupgrade 插件不是本 CI 的升级发布入口。
 
 每次先固定 PonWrt 源码 commit，再解析 feeds：保留上游已固定的版本；
