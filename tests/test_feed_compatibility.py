@@ -16,6 +16,17 @@ spec.loader.exec_module(patches)
 
 
 class FeedCompatibilityChecks(unittest.TestCase):
+    def assert_miniupnpd_patched(self, package):
+        if "PKG_VERSION:=2.3.11\n" not in (package / "Makefile").read_text():
+            return
+        for name in patches.MINIUPNPD_BACKPORTS:
+            self.assertFalse((package / "patches" / name).exists())
+        logging = package / "patches" / patches.MINIUPNPD_LOGGING_PATCH
+        # Some pinned feeds have already dropped the optional logging patch.
+        # Only a retained patch must match our refreshed version.
+        if logging.exists():
+            self.assertEqual(patches.MINIUPNPD_LOGGING_REFRESH.read_bytes(), logging.read_bytes())
+
     def miniupnpd_fixture(self, source, version):
         package = source / patches.MINIUPNPD
         (package / "patches").mkdir(parents=True)
@@ -42,6 +53,27 @@ class FeedCompatibilityChecks(unittest.TestCase):
             self.assertEqual("keep this patch\n", other.read_text())
             self.assertEqual("PKG_VERSION:=2.3.11\n", (package / "Makefile").read_text())
             self.assertEqual(patches.MINIUPNPD_LOGGING_REFRESH.read_bytes(), logging.read_bytes())
+            self.assert_miniupnpd_patched(package)
+
+    def test_miniupnpd_feed_without_obsolete_patches_passes_ci_check(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = pathlib.Path(tmp)
+            package, patch = self.miniupnpd_fixture(source, "2.3.11")
+            patch.unlink()  # Upstream already removed the obsolete backports.
+            other = package / "patches/900-compat.patch"
+            other.write_text("retain upstream compatibility\n")
+            patches.adjust_miniupnpd(source)
+            self.assert_miniupnpd_patched(package)
+            self.assertFalse((package / "patches" / patches.MINIUPNPD_LOGGING_PATCH).exists())
+            self.assertEqual("retain upstream compatibility\n", other.read_text())
+
+    def test_miniupnpd_ci_check_rejects_stale_retained_logging_patch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            package, patch = self.miniupnpd_fixture(pathlib.Path(tmp), "2.3.11")
+            patch.unlink()
+            (package / "patches" / patches.MINIUPNPD_LOGGING_PATCH).write_text("stale logging\n")
+            with self.assertRaises(AssertionError):
+                self.assert_miniupnpd_patched(package)
 
     def test_miniupnpd_unknown_logging_patch_preserves_all_files(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -124,11 +156,7 @@ class FeedCompatibilityChecks(unittest.TestCase):
                          "feeds/packages/libs/libudev-zero/Makefile"]:
             self.assertTrue((source / relative).is_file(), relative)
         package = source / patches.MINIUPNPD
-        if "PKG_VERSION:=2.3.11\n" in (package / "Makefile").read_text():
-            for name in patches.MINIUPNPD_BACKPORTS:
-                self.assertFalse((package / "patches" / name).exists())
-            logging = package / "patches" / patches.MINIUPNPD_LOGGING_PATCH
-            self.assertEqual(patches.MINIUPNPD_LOGGING_REFRESH.read_bytes(), logging.read_bytes())
+        self.assert_miniupnpd_patched(package)
 
 
 if __name__ == "__main__":
