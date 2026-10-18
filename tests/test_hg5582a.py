@@ -153,6 +153,32 @@ class CompiledDTChecks(unittest.TestCase):
                                         'nand-ecc-mode = "hw"; nand-ecc-strength = <8>;'))
 
 class ScriptChecks(unittest.TestCase):
+    def test_fit_recipes_use_variant_dtb_after_make_expansion(self):
+        # Reproduce the parent's := expansion, including stale inherited paths.
+        parent = '''
+define Device/fiberhome_hg5382a
+  DEVICE_DTS := an7581-fiberhome-hg5382a
+  KERNEL_INITRAMFS := kernel-bin | lzma | fit lzma $$(KDIR)/image-$$(DEVICE_DTS).dtb with-initrd | pad-to 128k
+  IMAGE/sysupgrade.itb := append-kernel | fit gzip $$(KDIR)/image-$$(DEVICE_DTS).dtb external-static-with-rootfs | append-metadata
+endef
+'''
+        script = parent + installer.BLOCK + '''
+KDIR := /tmp/kernel
+$(eval $(call Device/fiberhome_hg5582a))
+$(info recovery=$(KERNEL_INITRAMFS))
+$(info sysupgrade=$(IMAGE/sysupgrade.itb))
+all: ; @:
+'''
+        result = subprocess.check_output(["make", "--no-print-directory", "-f", "-"],
+                                         input=script, text=True)
+        recipes = result.strip().splitlines()
+        self.assertEqual(2, len(recipes))
+        for recipe in recipes:
+            self.assertIn("image-an7581-fiberhome-hg5582a.dtb", recipe)
+            self.assertNotIn("hg5382a.dtb", recipe)
+        self.assertIn("with-initrd | pad-to 128k", recipes[0])
+        self.assertIn("external-static-with-rootfs | append-metadata", recipes[1])
+
     def test_support_scripts_parse_as_posix_shell(self):
         for name in ["hg5582a-check-upgrade", "39-hg5582a-pon"]:
             subprocess.run(["sh", "-n", str(ROOT / "packages/hg5582a-support/files" / name)], check=True)

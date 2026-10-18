@@ -17,6 +17,10 @@ define Device/fiberhome_hg5582a
   $(call Device/fiberhome_hg5382a)
   DEVICE_MODEL := HG5582A
   DEVICE_DTS := an7581-fiberhome-hg5582a
+  # The parent uses immediate assignments, which capture its own DEVICE_DTS.
+  # Rebind both FIT recipes after selecting this variant's device tree.
+  KERNEL_INITRAMFS := kernel-bin | lzma | fit lzma $$(KDIR)/image-$$(DEVICE_DTS).dtb with-initrd | pad-to 128k
+  IMAGE/sysupgrade.itb := append-kernel | fit gzip $$(KDIR)/image-$$(DEVICE_DTS).dtb external-static-with-rootfs | append-metadata
   SUPPORTED_DEVICES := fiberhome,hg5582a fiberhome,hg5382a
   DEVICE_PACKAGES += hg5582a-support
 endef
