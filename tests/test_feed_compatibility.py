@@ -16,6 +16,41 @@ spec.loader.exec_module(patches)
 
 
 class FeedCompatibilityChecks(unittest.TestCase):
+    def test_unused_luci_cycle_links_removed_but_sources_and_runtime_apps_kept(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = pathlib.Path(tmp)
+            links = source / "package/feeds/luci"
+            links.mkdir(parents=True)
+            for name in (*patches.UNUSED_LUCI_CYCLES, "luci-app-openclash"):
+                package = source / "feeds/luci/applications" / name
+                package.mkdir(parents=True)
+                (package / "Makefile").write_text("preserve package source\n")
+                (links / name).symlink_to(package)
+            patches.exclude_unused_luci_cycles(source)
+            patches.exclude_unused_luci_cycles(source)
+            for name in patches.UNUSED_LUCI_CYCLES:
+                self.assertFalse((links / name).is_symlink())
+                self.assertTrue((source / "feeds/luci/applications" / name / "Makefile").is_file())
+            self.assertTrue((links / "luci-app-openclash").is_symlink())
+
+    def test_luci_exclusion_refuses_real_directories_before_removing_links(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = pathlib.Path(tmp)
+            links = source / "package/feeds/luci"
+            links.mkdir(parents=True)
+            first = links / patches.UNUSED_LUCI_CYCLES[0]
+            first.symlink_to("missing feed source")
+            (links / patches.UNUSED_LUCI_CYCLES[1]).mkdir()
+            with self.assertRaisesRegex(ValueError, "Refusing to remove non-feed"):
+                patches.exclude_unused_luci_cycles(source)
+            self.assertTrue(first.is_symlink())
+
+    def test_luci_exclusion_cannot_remove_requested_application(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(patches, "UNUSED_LUCI_CYCLES", ("luci-app-openclash",)):
+                with self.assertRaisesRegex(ValueError, "Cannot exclude requested"):
+                    patches.exclude_unused_luci_cycles(pathlib.Path(tmp))
+
     def assert_miniupnpd_patched(self, package):
         if "PKG_VERSION:=2.3.11\n" not in (package / "Makefile").read_text():
             return
@@ -148,6 +183,8 @@ class FeedCompatibilityChecks(unittest.TestCase):
         if not path:
             self.skipTest("Only checked when a fetched PonWrt source is available")
         source = pathlib.Path(path)
+        for name in patches.UNUSED_LUCI_CYCLES:
+            self.assertFalse((source / "package/feeds/luci" / name).is_symlink())
         self.assertFalse((source / patches.MPD_LINK).is_symlink())
         evdev = (source / patches.LIBEVDEV_MAKEFILE).read_text()
         self.assertNotIn("DEPENDS:=input-support", evdev)
