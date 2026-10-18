@@ -5,6 +5,7 @@ import os
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location(
@@ -15,6 +16,61 @@ spec.loader.exec_module(patches)
 
 
 class FeedCompatibilityChecks(unittest.TestCase):
+    def miniupnpd_fixture(self, source, version):
+        package = source / patches.MINIUPNPD
+        (package / "patches").mkdir(parents=True)
+        (package / "Makefile").write_text(f"PKG_VERSION:={version}\n")
+        patch = package / "patches" / "020-descr-filter-fix.patch"
+        patch.write_text("known permission-parser backport\n")
+        return package, patch
+
+    def test_miniupnpd_removes_only_verified_backport_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = pathlib.Path(tmp)
+            package, patch = self.miniupnpd_fixture(source, "2.3.11")
+            other = package / "patches/900-compat.patch"
+            other.write_text("keep this patch\n")
+            logging = package / "patches" / patches.MINIUPNPD_LOGGING_PATCH
+            logging.write_text("known logging patch\n")
+            digest = patches.hashlib.sha256(patch.read_bytes()).hexdigest()
+            logging_digest = patches.hashlib.sha256(logging.read_bytes()).hexdigest()
+            with mock.patch.object(patches, "MINIUPNPD_BACKPORTS", {patch.name: digest}), \
+                    mock.patch.object(patches, "MINIUPNPD_LOGGING_SHA256", logging_digest):
+                patches.adjust_miniupnpd(source)
+                patches.adjust_miniupnpd(source)
+            self.assertFalse(patch.exists())
+            self.assertEqual("keep this patch\n", other.read_text())
+            self.assertEqual("PKG_VERSION:=2.3.11\n", (package / "Makefile").read_text())
+            self.assertEqual(patches.MINIUPNPD_LOGGING_REFRESH.read_bytes(), logging.read_bytes())
+
+    def test_miniupnpd_unknown_logging_patch_preserves_all_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = pathlib.Path(tmp)
+            package, patch = self.miniupnpd_fixture(source, "2.3.11")
+            logging = package / "patches" / patches.MINIUPNPD_LOGGING_PATCH
+            logging.write_text("unreviewed logging patch\n")
+            digest = patches.hashlib.sha256(patch.read_bytes()).hexdigest()
+            with mock.patch.object(patches, "MINIUPNPD_BACKPORTS", {patch.name: digest}):
+                with self.assertRaisesRegex(ValueError, "Unrecognized miniupnpd logging"):
+                    patches.adjust_miniupnpd(source)
+            self.assertTrue(patch.exists())
+            self.assertEqual("unreviewed logging patch\n", logging.read_text())
+
+    def test_miniupnpd_older_release_keeps_its_required_backport(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = pathlib.Path(tmp)
+            _, patch = self.miniupnpd_fixture(source, "2.3.9")
+            patches.adjust_miniupnpd(source)
+            self.assertTrue(patch.exists())
+
+    def test_miniupnpd_changed_patch_requires_review(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = pathlib.Path(tmp)
+            _, patch = self.miniupnpd_fixture(source, "2.3.11")
+            with self.assertRaisesRegex(ValueError, "Unrecognized miniupnpd"):
+                patches.adjust_miniupnpd(source)
+            self.assertTrue(patch.exists())
+
     def test_unused_mpd_removed_and_libevdev_usb_chain_unblocked(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = pathlib.Path(tmp)
@@ -67,6 +123,12 @@ class FeedCompatibilityChecks(unittest.TestCase):
                          "feeds/packages/utils/usbmuxd/Makefile",
                          "feeds/packages/libs/libudev-zero/Makefile"]:
             self.assertTrue((source / relative).is_file(), relative)
+        package = source / patches.MINIUPNPD
+        if "PKG_VERSION:=2.3.11\n" in (package / "Makefile").read_text():
+            for name in patches.MINIUPNPD_BACKPORTS:
+                self.assertFalse((package / "patches" / name).exists())
+            logging = package / "patches" / patches.MINIUPNPD_LOGGING_PATCH
+            self.assertEqual(patches.MINIUPNPD_LOGGING_REFRESH.read_bytes(), logging.read_bytes())
 
 
 if __name__ == "__main__":
