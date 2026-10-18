@@ -97,6 +97,8 @@ CI 为 Airoha 补齐脚本安装与页面接入，并逐个检查最终镜像中
 此 CI 在解析阶段排除该非必需多媒体 feed；保留 packages、LuCI、路由及 PON feeds，
 并在 `feeds-resolution.json` 中记录 `excluded_feeds`。
 同时移除未选择的 `mpd` feed 包入口以消除剩余 Kconfig 自循环；
+历史 HG5582A feeds 中未选用的 HomeProxy、IPsec VPN、Passwall 也存在循环依赖，
+因此仅移除这三个应用的 feed 链接，保留源码和已选应用；若以后将其加入必需清单或配置，CI 会停止并要求先解决依赖。
 针对当前 `libevdev` 的不可用 `input-support` 依赖，在编译前执行只作用于此包的兼容调整，
 显式选用 `libudev-zero`，保留 `usbutils` / `usbmuxd` 的强制校验。
 这能减少 feed 超前的问题，但不能保证未来所有上游版本一定编译成功。

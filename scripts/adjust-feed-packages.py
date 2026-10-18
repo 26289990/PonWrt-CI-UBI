@@ -20,6 +20,29 @@ MINIUPNPD_BACKPORTS = {
 MINIUPNPD_LOGGING_PATCH = "040-improve-logging.patch"
 MINIUPNPD_LOGGING_SHA256 = "aad6802ab9d01ecea2c143d7495644b714e171552434049f8669d4f28611bcba"
 MINIUPNPD_LOGGING_REFRESH = pathlib.Path(__file__).resolve().parent.parent / "config/miniupnpd/040-improve-logging-2.3.11.patch"
+UNUSED_LUCI_CYCLES = ("luci-app-homeproxy", "luci-app-ipsec-vpnd", "luci-app-passwall")
+
+
+def exclude_unused_luci_cycles(source):
+    ci = pathlib.Path(__file__).resolve().parent.parent
+    requested = "\n".join((ci / "config" / name).read_text() for name in (
+        "common.config", "general-packages.config", "pon-packages.config"))
+    required = set((ci / "config/required-packages.txt").read_text().splitlines())
+    # These unused apps introduce sing-box/strongswan/self dependency cycles in
+    # the historical HG5582A feeds. Only remove the installed feed links, keeping
+    # the feed sources and all requested runtime applications intact.
+    links = []
+    for name in UNUSED_LUCI_CYCLES:
+        if name in required or re.search(rf"^CONFIG_PACKAGE_{re.escape(name)}=[ym]$", requested, re.M):
+            raise ValueError(f"Cannot exclude requested LuCI package: {name}")
+        link = pathlib.Path(source) / "package/feeds/luci" / name
+        if link.is_symlink():
+            links.append(link)
+        elif link.exists():
+            raise ValueError(f"Refusing to remove non-feed package: {link}")
+    for link in links:
+        link.unlink()
+        print(f"Excluded unused cyclic LuCI feed package: {link.name}")
 
 
 def adjust_miniupnpd(source):
@@ -53,6 +76,7 @@ def adjust_miniupnpd(source):
 
 def adjust(source):
     source = pathlib.Path(source)
+    exclude_unused_luci_cycles(source)
     adjust_miniupnpd(source)
     mpd = source / MPD_LINK
     if mpd.is_symlink():
