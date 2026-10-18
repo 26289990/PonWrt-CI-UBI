@@ -1,15 +1,6 @@
 name: Build HG5582A Toshiba ECC8 (r24 source)
 
 on:
-  push:
-    branches: [feat/hg5582a-toshiba-ecc8]
-    paths:
-      - '.github/workflows/**'
-      - 'boards/**'
-      - 'packages/**'
-      - 'scripts/**'
-      - 'tests/**'
-      - 'config/**'
   workflow_dispatch:
 
 permissions:

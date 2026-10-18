@@ -1,0 +1,70 @@
+name: Diagnose failed firmware builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Run ID to inspect (empty selects the three latest failures)
+        type: string
+        default: ''
+  workflow_run:
+    workflows: ['Build PonWrt supported PON devices', 'Build HG5582A Toshiba ECC8 (r24 source)']
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  diagnose:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Extract compiler errors from failed runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REQUESTED_RUN: ${{ inputs.run_id || github.event.workflow_run.id }}
+        run: |
+          python3 - <<'PY'
+          import io, json, os, pathlib, re, subprocess, zipfile
+          repository = os.environ['REPOSITORY']
+          def api(path):
+              return subprocess.check_output(['gh', 'api', f'repos/{repository}/{path}'])
+          requested = os.environ.get('REQUESTED_RUN', '')
+          if requested:
+              if not requested.isdecimal():
+                  raise ValueError('run_id must contain only digits')
+              runs = [json.loads(api(f'actions/runs/{requested}'))]
+          else:
+              runs = json.loads(api('actions/runs?status=failure&per_page=20'))['workflow_runs'][:3]
+          output = pathlib.Path('diagnostics')
+          output.mkdir()
+          pattern = re.compile(r'error:|fatal error|Error [0-9]+|FAILED:|No space left|Killed|undefined reference|not found', re.I)
+          for run in runs:
+              run_id = run['id']
+              archive = api(f'actions/runs/{run_id}/logs')
+              (output / f'{run_id}-logs.zip').write_bytes(archive)
+              sections = [f"Run {run_id}: {run['html_url']}\nBranch: {run['head_branch']}\n"]
+              with zipfile.ZipFile(io.BytesIO(archive)) as logs:
+                  for name in logs.namelist():
+                      if '/' in name or not re.match(r'\d+_.*Build ', name):
+                          continue
+                      lines = logs.read(name).decode('utf-8-sig', errors='replace').splitlines()
+                      positions = set(range(max(0, len(lines) - 80), len(lines)))
+                      matches = [i for i, line in enumerate(lines) if pattern.search(line)]
+                      # Keep the final failures, skipping expected configure probes.
+                      for index in matches[-40:]:
+                          positions.update(range(max(0, index - 8), min(len(lines), index + 9)))
+                      sections.append('\n' + name + '\n' + '\n'.join(lines[i] for i in sorted(positions)))
+              summary = '\n'.join(sections)
+              (output / f'{run_id}-errors.txt').write_text(summary)
+              print(summary, flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: failed-build-logs
+          path: diagnostics/
+          retention-days: 7

@@ -1,6 +1,7 @@
 # PonWrt-CI-UBI
 
-为 [pbs05/ponwrt](https://github.com/pbs05/ponwrt) 上游发布配置中的全部 PON 设备编译固件。
+为 [pbs05/ponwrt](https://github.com/pbs05/ponwrt) 的 AN7581 / AN7583 PON 设备编译固件，
+覆盖上游发布配置，并增加 HG5582A Toshiba/ECC8 独立板型。
 每周跟随上游 master，沿用原 XG-040G-MD CI 的常用软件包和中文界面。
 仓库保存 CI、配置片段、包导入脚本与文件覆盖层，编译时拉取 PonWrt 源码。
 
@@ -74,6 +75,13 @@ MF 原布局的原生 factory 分拆文件不等同于 MD 的 UBI 迁移包。
 
 ## HG5582A Toshiba/ECC8 固件
 
+**构建状态：2026-10-18 已通过完整编译及镜像校验。**
+[成功构建记录](https://github.com/Kahen/PonWrt-CI-UBI/actions/runs/39092495823)
+中的 `PonWrt-firmware-an7581` Artifact 包含独立 HG5582A 固件、只读升级检查脚本及板级校验报告。
+该次构建固定 CI 提交 `c564034` 和下述 r24 源码；Artifact 有保留期限，过期后可手动重建。
+现有 `ponwrt-2026.10.18-1251-r26` Release 在加入此板型前生成，不含 HG5582A；
+后续全机型 Release 是否包含它，以附件 `device-catalog.json` 为准。
+
 独立 profile 为 `fiberhome_hg5582a`，输出 HG5582A 名称的 sysupgrade 和 initramfs。
 已验证硬件范围为 HG5582A V4.2.0：AN7581、512 MiB DDR4、
 Toshiba TC58NVG1S3HTAI0（256 MiB、2 KiB 页、128 KiB 擦除块、128 字节 OOB）、
@@ -105,9 +113,9 @@ sh HG5582A-Toshiba-ECC8-check-upgrade.sh /tmp/ponwrt-airoha-an7581-fiberhome_hg5
 已验证共享固件上的校准加载；这个新镜像的实机启动/运营商注册仍须单独验证。
 
 Actions → **Build HG5582A Toshiba ECC8 (r24 source)** 固定使用给定 r24 的
-上游提交 a57faf93c6c3638ba3651690228aabaa51d3f235，仅构建 HG5582A，
-通过验证后产物在 PonWrt-firmware-an7581 Artifact。候选构建不发布正式 Release。
-通用 weekly workflow 则继续按选定源码构建全机型，并加入此 CI 板型。
+上游提交 `a57faf93c6c3638ba3651690228aabaa51d3f235`，可在 main 手动运行，仅构建 HG5582A，
+通过验证后产物在 `PonWrt-firmware-an7581` Artifact；此专用任务不发布正式 Release。
+通用每周/手动全机型 workflow 按选定源码构建 15 个 profile，包含此 CI 板型。
 
 ## 软件包与硬件配置
 
