@@ -70,15 +70,33 @@ import_openclash() {
 import_viking_packages() {
   # Bingoguo/VIKINGYFY packages provide GecoosAC and the WOL LuCI app.
   # The WOL package was renamed from luci-app-wolplus to luci-app-wolultra.
+  local tmp name
+  tmp="$(mktemp -d)"
   remove_matches "gecoosac"
   remove_matches "luci-app-wolplus"
   remove_matches "luci-app-wolultra"
   remove_matches "luci-app-timewol"
   rm -rf ./package/viking-packages
 
-  git clone --depth=1 --single-branch --branch main \
-    https://github.com/VIKINGYFY/packages.git ./package/viking-packages
-  record_commit VIKINGYFY/packages ./package/viking-packages
+  # Import only the requested applications and GecoosAC's runtime dependency.
+  # Other repository packages (notably HomeProxy/sing-box) override pinned feeds
+  # and can introduce Kconfig cycles even when they are not selected.
+  git clone --depth=1 --single-branch --branch main --filter=blob:none --sparse \
+    https://github.com/VIKINGYFY/packages.git "$tmp/packages"
+  git -C "$tmp/packages" sparse-checkout set \
+    gecoosac luci-app-gecoosac luci-app-wolultra
+  for name in gecoosac luci-app-gecoosac luci-app-wolultra; do
+    if [ ! -f "$tmp/packages/$name/Makefile" ]; then
+      echo "ERROR: VIKING package is missing $name/Makefile" >&2
+      exit 1
+    fi
+  done
+  mkdir -p ./package/viking-packages
+  for name in gecoosac luci-app-gecoosac luci-app-wolultra; do
+    cp -a "$tmp/packages/$name" "./package/viking-packages/$name"
+  done
+  record_commit VIKINGYFY/packages "$tmp/packages"
+  rm -rf "$tmp"
 }
 
 import_autoreboot() {
