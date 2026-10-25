@@ -58,9 +58,12 @@ class FeedCompatibilityChecks(unittest.TestCase):
             self.assertFalse((package / "patches" / name).exists())
         logging = package / "patches" / patches.MINIUPNPD_LOGGING_PATCH
         # Some pinned feeds have already dropped the optional logging patch.
-        # Only a retained patch must match our refreshed version.
+        # A retained patch must be the CI refresh or the verified upstream fix.
         if logging.exists():
-            self.assertEqual(patches.MINIUPNPD_LOGGING_REFRESH.read_bytes(), logging.read_bytes())
+            self.assertIn(patches.hashlib.sha256(logging.read_bytes()).hexdigest(), {
+                patches.hashlib.sha256(patches.MINIUPNPD_LOGGING_REFRESH.read_bytes()).hexdigest(),
+                patches.MINIUPNPD_UPSTREAM_LOGGING_SHA256,
+            })
 
     def miniupnpd_fixture(self, source, version):
         package = source / patches.MINIUPNPD
@@ -101,6 +104,34 @@ class FeedCompatibilityChecks(unittest.TestCase):
             self.assert_miniupnpd_patched(package)
             self.assertFalse((package / "patches" / patches.MINIUPNPD_LOGGING_PATCH).exists())
             self.assertEqual("retain upstream compatibility\n", other.read_text())
+
+    def test_miniupnpd_upstream_refresh_is_preserved_and_passes_ci_check(self):
+        # Exact patch from the failed run's packages feed (72c7391fb2d0).
+        refreshed = (ROOT / "tests/fixtures/miniupnpd/040-improve-logging-upstream.patch").read_bytes()
+        with tempfile.TemporaryDirectory() as tmp:
+            source = pathlib.Path(tmp)
+            package, patch = self.miniupnpd_fixture(source, "2.3.11")
+            patch.unlink()  # Upstream e765fb8870b5 also removed both backports.
+            logging = package / "patches" / patches.MINIUPNPD_LOGGING_PATCH
+            logging.write_bytes(refreshed)
+            patches.adjust_miniupnpd(source)
+            self.assert_miniupnpd_patched(package)
+            patches.adjust_miniupnpd(source)
+            self.assertEqual(refreshed, logging.read_bytes())
+
+    def test_miniupnpd_modified_upstream_refresh_requires_review(self):
+        refreshed = (ROOT / "tests/fixtures/miniupnpd/040-improve-logging-upstream.patch").read_bytes()
+        with tempfile.TemporaryDirectory() as tmp:
+            source = pathlib.Path(tmp)
+            package, patch = self.miniupnpd_fixture(source, "2.3.11")
+            patch.unlink()
+            logging = package / "patches" / patches.MINIUPNPD_LOGGING_PATCH
+            modified = refreshed.replace(b"LOG_WARNING", b"LOG_DEBUG", 1)
+            self.assertNotEqual(refreshed, modified)
+            logging.write_bytes(modified)
+            with self.assertRaisesRegex(ValueError, "Unrecognized miniupnpd logging"):
+                patches.adjust_miniupnpd(source)
+            self.assertEqual(modified, logging.read_bytes())
 
     def test_miniupnpd_ci_check_rejects_stale_retained_logging_patch(self):
         with tempfile.TemporaryDirectory() as tmp:
