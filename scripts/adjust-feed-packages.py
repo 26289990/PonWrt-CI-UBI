@@ -19,6 +19,9 @@ MINIUPNPD_BACKPORTS = {
 }
 MINIUPNPD_LOGGING_PATCH = "040-improve-logging.patch"
 MINIUPNPD_LOGGING_SHA256 = "aad6802ab9d01ecea2c143d7495644b714e171552434049f8669d4f28611bcba"
+# ImmortalWrt packages e765fb8870b5911992eb4b5a1624ad451e42f4a8
+# already refreshes this patch for 2.3.11. Keep its contents byte-for-byte.
+MINIUPNPD_UPSTREAM_LOGGING_SHA256 = "69fb7a80e422b6533086b48c1a531eb2eb20c068a8a7f0722fc11ce905e83f23"
 MINIUPNPD_LOGGING_REFRESH = pathlib.Path(__file__).resolve().parent.parent / "config/miniupnpd/040-improve-logging-2.3.11.patch"
 UNUSED_LUCI_CYCLES = ("luci-app-homeproxy", "luci-app-ipsec-vpnd", "luci-app-passwall")
 
@@ -63,15 +66,21 @@ def adjust_miniupnpd(source):
             obsolete.append(patch)
     logging = package / "patches" / MINIUPNPD_LOGGING_PATCH
     refreshed = MINIUPNPD_LOGGING_REFRESH.read_bytes()
+    logging_action = "kept refreshed or absent logging patch"
     if logging.exists() and logging.read_bytes() != refreshed:
-        if hashlib.sha256(logging.read_bytes()).hexdigest() != MINIUPNPD_LOGGING_SHA256:
+        checksum = hashlib.sha256(logging.read_bytes()).hexdigest()
+        if checksum == MINIUPNPD_UPSTREAM_LOGGING_SHA256:
+            logging_action = "kept upstream logging fix"
+        elif checksum == MINIUPNPD_LOGGING_SHA256:
+            logging.write_bytes(refreshed)
+            logging_action = "refreshed legacy logging patch"
+        else:
             raise ValueError("Unrecognized miniupnpd logging patch")
-        logging.write_bytes(refreshed)
     # 2.3.11 includes both parser/private-address fixes. Retain upstream security
     # fixes, source hash, UPnP compatibility patches and refreshed logging behavior.
     for patch in obsolete:
         patch.unlink()
-    print("miniupnpd 2.3.11: omitted merged backports and refreshed logging patch")
+    print(f"miniupnpd 2.3.11: omitted merged backports; {logging_action}")
 
 
 def adjust(source):

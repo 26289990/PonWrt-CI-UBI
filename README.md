@@ -153,6 +153,12 @@ CI 为 Airoha 补齐脚本安装与页面接入，并逐个检查最终镜像中
 显式选用 `libudev-zero`，保留 `usbutils` / `usbmuxd` 的强制校验。
 这能减少 feed 超前的问题，但不能保证未来所有上游版本一定编译成功。
 
+miniupnpd 2.3.11 的补丁已由 ImmortalWrt packages 在
+[`e765fb8870b5`](https://github.com/immortalwrt/packages/commit/e765fb8870b5911992eb4b5a1624ad451e42f4a8)
+（2026-10-20）刷新。CI 按已核实的 SHA256 保留上游修复；历史 feed 仍使用原有兼容处理，
+未知补丁继续停止构建。回归测试包含失败运行所用的真实补丁，并在准备阶段先执行。
+Pull Request 会构建两个芯片的固件并执行镜像检查，通过后仅上传 Artifacts。
+
 `config/xg040g-md-ubi.config`、`menuconfig.config`、`validation/resolved.config` 和
 `config/feeds.conf` 保留作最初 MD 成功版本的记录，不参与当前多机型配置合并。
 

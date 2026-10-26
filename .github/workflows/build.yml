@@ -42,6 +42,15 @@ on:
       - 'scripts/**'
       - 'files/**'
       - 'tests/**'
+  pull_request:
+    paths:
+      - '.github/workflows/build.yml'
+      - 'boards/**'
+      - 'packages/**'
+      - 'config/**'
+      - 'scripts/**'
+      - 'files/**'
+      - 'tests/**'
 
 permissions:
   contents: write
@@ -64,9 +73,11 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
       release_tag: ${{ steps.release.outputs.release_tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Verify feed selection for headless PON builds
         run: python3 -m unittest discover -s tests -p test_feed_selection.py -v
+      - name: Verify feed compatibility regressions before building
+        run: python3 -m unittest discover -s tests -p test_feed_compatibility.py -v
       - name: Verify immutable release references
         run: python3 -m unittest discover -s tests -p test_release.py -v
       - name: Pin release tag before building
@@ -102,7 +113,7 @@ jobs:
               output.write('matrix=' + json.dumps({'subtarget': list(catalog['targets'])}) + '\n')
           PY
       - name: Upload immutable build plan
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: PonWrt-build-plan
           path: build-plan/
@@ -123,9 +134,9 @@ jobs:
       SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
     steps:
       - name: Checkout CI repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Download shared build plan
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: PonWrt-build-plan
           path: build-plan
@@ -158,7 +169,7 @@ jobs:
           python3 scripts/install-hg5582a.py openwrt
           cp build-plan/feeds.conf.default build-plan/feeds-resolution.json openwrt/
       - name: Cache source downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: openwrt/dl
           key: ponwrt-dl-${{ runner.os }}-${{ matrix.subtarget }}-${{ needs.prepare.outputs.source_commit }}-${{ hashFiles('config/**', 'scripts/customize.sh') }}
@@ -198,7 +209,7 @@ jobs:
       - name: Validate every device image and collect firmware
         run: bash scripts/collect.sh openwrt "output/$SUBTARGET" "$SUBTARGET" build-plan/catalog.json
       - name: Upload validated firmware
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: PonWrt-firmware-${{ matrix.subtarget }}
           path: output/${{ matrix.subtarget }}/
@@ -206,7 +217,7 @@ jobs:
           retention-days: 14
       - name: Upload configuration and diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: PonWrt-diagnostics-${{ matrix.subtarget }}
           path: |
@@ -228,13 +239,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
         with:
           name: PonWrt-build-plan
           path: build-plan
       - name: Download all validated firmware sets
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: PonWrt-firmware-*
           path: output
