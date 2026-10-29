@@ -23,7 +23,7 @@ MINIUPNPD_LOGGING_SHA256 = "aad6802ab9d01ecea2c143d7495644b714e171552434049f8669
 # already refreshes this patch for 2.3.11. Keep its contents byte-for-byte.
 MINIUPNPD_UPSTREAM_LOGGING_SHA256 = "69fb7a80e422b6533086b48c1a531eb2eb20c068a8a7f0722fc11ce905e83f23"
 MINIUPNPD_LOGGING_REFRESH = pathlib.Path(__file__).resolve().parent.parent / "config/miniupnpd/040-improve-logging-2.3.11.patch"
-UNUSED_LUCI_CYCLES = ("luci-app-homeproxy", "luci-app-ipsec-vpnd", "luci-app-passwall")
+UNUSED_LUCI_CYCLES = ("luci-app-homeproxy", "luci-app-ipsec-vpnd")
 
 
 def exclude_unused_luci_cycles(source):
