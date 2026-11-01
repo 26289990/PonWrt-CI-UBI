@@ -152,6 +152,76 @@ import_airoha_npu() {
   record_commit "$repo" "$dest"
 }
 
+import_passwall() {
+  # Official Passwall: replace feed/ImmortalWrt copies with matched luci + packages.
+  # Do NOT remove smartdns here — this CI enables luci-app-smartdns.
+  echo "Importing official Passwall..."
+
+  rm -rf \
+    feeds/packages/net/xray-core \
+    feeds/packages/net/v2ray-geodata \
+    feeds/packages/net/sing-box \
+    feeds/packages/net/chinadns-ng \
+    feeds/packages/net/dns2socks \
+    feeds/packages/net/hysteria \
+    feeds/packages/net/ipt2socks \
+    feeds/packages/net/microsocks \
+    feeds/packages/net/naiveproxy \
+    feeds/packages/net/shadowsocks-rust \
+    feeds/packages/net/shadowsocksr-libev \
+    feeds/packages/net/simple-obfs \
+    feeds/packages/net/tcping \
+    feeds/packages/net/v2ray-plugin \
+    feeds/packages/net/xray-plugin \
+    feeds/packages/net/geoview \
+    feeds/packages/net/shadow-tls \
+    package/feeds/packages/xray-core \
+    package/feeds/packages/v2ray-geodata \
+    package/feeds/packages/sing-box \
+    package/feeds/packages/chinadns-ng \
+    package/feeds/packages/dns2socks \
+    package/feeds/packages/hysteria \
+    package/feeds/packages/ipt2socks \
+    package/feeds/packages/microsocks \
+    package/feeds/packages/naiveproxy \
+    package/feeds/packages/shadowsocks-rust \
+    package/feeds/packages/shadowsocksr-libev \
+    package/feeds/packages/simple-obfs \
+    package/feeds/packages/tcping \
+    package/feeds/packages/v2ray-plugin \
+    package/feeds/packages/xray-plugin \
+    package/feeds/packages/geoview \
+    package/feeds/packages/shadow-tls \
+    feeds/luci/applications/luci-app-passwall \
+    package/feeds/luci/luci-app-passwall \
+    package/luci-app-passwall \
+    package/passwall-luci \
+    package/passwall-packages \
+    2>/dev/null || true
+
+  git clone --depth=1 --single-branch --branch main \
+    https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git \
+    ./package/passwall-packages
+  git clone --depth=1 --single-branch --branch main \
+    https://github.com/Openwrt-Passwall/openwrt-passwall.git \
+    ./package/passwall-luci
+
+  if [ ! -f ./package/passwall-packages/Makefile ] \
+    && [ -z "$(find ./package/passwall-packages -maxdepth 2 -name Makefile | head -n1)" ]; then
+    echo "ERROR: passwall-packages looks empty or invalid" >&2
+    exit 1
+  fi
+  if [ ! -f ./package/passwall-luci/luci-app-passwall/Makefile ] \
+    && [ ! -f ./package/passwall-luci/Makefile ]; then
+    echo "ERROR: passwall-luci does not contain luci-app-passwall Makefile" >&2
+    exit 1
+  fi
+
+  record_commit Openwrt-Passwall/openwrt-passwall-packages ./package/passwall-packages
+  record_commit Openwrt-Passwall/openwrt-passwall ./package/passwall-luci
+  echo "Official Passwall import completed."
+}
+
 echo "Importing third-party packages used by the GENERAL package set..."
 
 import_openclash
@@ -160,6 +230,7 @@ import_viking_packages
 import_airoha_npu
 import_footstrap
 import_autoreboot
+import_passwall
 
 # Connect autocore to the pinned LuCI feed before package metadata is generated.
 python3 "$(dirname "$0")/integrate-temperature.py" .
@@ -173,6 +244,8 @@ fi
 
 # The pinned packages feed retains an unused MPD Kconfig self-cycle and
 # libevdev's input-support feature guard blocks libudev-zero / usbutils.
+# Passwall must already be imported above; adjust-feed-packages must NOT
+# list luci-app-passwall in UNUSED_LUCI_CYCLES.
 python3 "$(dirname "$0")/adjust-feed-packages.py" .
 
 # Force package metadata to be regenerated after adding/removing package trees.
