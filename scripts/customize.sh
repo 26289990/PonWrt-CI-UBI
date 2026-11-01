@@ -222,6 +222,27 @@ import_passwall() {
   echo "Official Passwall import completed."
 }
 
+import_3proxy() {
+  # luci-app-3cat depends on 3proxy-mod-tcppm / 3proxy-mod-udppm.
+  # Locked packages feed often has no net/3proxy; pull from ImmortalWrt packages.
+  echo "Importing 3proxy for luci-app-3cat..."
+  remove_matches "3proxy"
+  local tmp
+  tmp="$(mktemp -d)"
+  git clone --depth=1 --filter=blob:none --sparse \
+    https://github.com/immortalwrt/packages.git "$tmp/packages"
+  git -C "$tmp/packages" sparse-checkout set net/3proxy
+  if [ ! -f "$tmp/packages/net/3proxy/Makefile" ]; then
+    echo "ERROR: immortalwrt/packages missing net/3proxy/Makefile" >&2
+    exit 1
+  fi
+  mkdir -p ./package
+  cp -a "$tmp/packages/net/3proxy" ./package/3proxy
+  record_commit immortalwrt/packages-3proxy "$tmp/packages"
+  rm -rf "$tmp"
+  echo "3proxy import completed."
+}
+
 echo "Importing third-party packages used by the GENERAL package set..."
 
 import_openclash
@@ -231,6 +252,7 @@ import_airoha_npu
 import_footstrap
 import_autoreboot
 import_passwall
+import_3proxy
 
 # Connect autocore to the pinned LuCI feed before package metadata is generated.
 python3 "$(dirname "$0")/integrate-temperature.py" .
