@@ -1,9 +1,6 @@
 name: Build PonWrt supported PON devices
 
 on:
-  schedule:
-    # UTC Saturday 20:17 = Sunday 04:17 in Asia/Shanghai.
-    - cron: '17 20 * * 6'
   workflow_call:
     inputs:
       source_ref:
