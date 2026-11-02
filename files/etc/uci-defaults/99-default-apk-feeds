@@ -1,1 +1,24 @@
+#!/bin/sh
+# First-boot: set ImmortalWrt snapshot APK feeds to PKU mirror (OpenWrt 25 / apk).
 
+FEED_DIR="/etc/apk/repositories.d"
+FEED_FILE="${FEED_DIR}/distfeeds.list"
+
+mkdir -p "$FEED_DIR"
+
+cat > "$FEED_FILE" << 'EOF'
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/targets/airoha/an7583/packages/packages.adb
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/aarch64_cortex-a53/base/packages.adb
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/aarch64_cortex-a53/luci/packages.adb
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/aarch64_cortex-a53/packages/packages.adb
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/aarch64_cortex-a53/routing/packages.adb
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/aarch64_cortex-a53/telephony/packages.adb
+EOF
+
+# Optional: drop other leftover feed lists under repositories.d so only this list is used
+# for file in "$FEED_DIR"/*.list; do
+#   [ "$file" = "$FEED_FILE" ] && continue
+#   [ -f "$file" ] && rm -f "$file"
+# done
+
+exit 0
