@@ -265,6 +265,28 @@ import_istore() {
   echo "iStore import completed."
 }
 
+import_minigate() {
+  # PKG_NAME is minigate (PROVIDES luci-app-minigate).
+  # Upstream DEPENDS:=+nginx-ssl +nginx-mod-stream causes Kconfig recursion:
+  #   PACKAGE_minigate depends on PACKAGE_nginx-ssl
+  #   PACKAGE_nginx-ssl is selected by PACKAGE_minigate
+  # Strip those hard deps here; enable nginx-* in general-packages.config instead.
+  echo "Importing minigate..."
+  clone_direct "minigate" "tpxcer/minigate" "main"
+  if [ ! -f ./package/minigate/Makefile ]; then
+    echo "ERROR: package/minigate/Makefile missing after clone" >&2
+    exit 1
+  fi
+  sed -i \
+    -e 's/+nginx-ssl //g' \
+    -e 's/+nginx-mod-stream //g' \
+    ./package/minigate/Makefile
+  if grep -qE 'nginx-ssl|nginx-mod-stream' ./package/minigate/Makefile; then
+    echo "WARNING: minigate Makefile still references nginx-*; check DEPENDS" >&2
+  fi
+  echo "minigate import completed (nginx hard-deps removed)."
+}
+
 echo "Importing third-party packages used by the GENERAL package set..."
 
 import_openclash
@@ -279,7 +301,7 @@ import_3proxy
 # Extra apps requested for OpenWrt 25
 import_nested_luci_app "luci-app-taskplan" "sirpdboy/luci-app-taskplan" "main"
 import_nested_luci_app "luci-app-run" "wukongdaily/luci-app-run" "master"
-clone_direct "minigate" "tpxcer/minigate" "main"
+import_minigate
 import_istore
 
 python3 "$(dirname "$0")/integrate-temperature.py" .
