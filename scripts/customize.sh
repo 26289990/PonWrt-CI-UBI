@@ -28,7 +28,6 @@ clone_direct() {
 }
 
 import_nested_luci_app() {
-  # Clone a repo whose OpenWrt package lives in a subdirectory named $1.
   local pkg="$1"
   local repo="$2"
   local branch="$3"
@@ -43,7 +42,6 @@ import_nested_luci_app() {
     exit 1
   fi
   cp -a "$src" "./package/${pkg}"
-  # Normalize relative luci.mk include when present
   if grep -q 'include ../../luci.mk' "./package/${pkg}/Makefile" 2>/dev/null; then
     sed -i 's|include ../../luci.mk|include $(TOPDIR)/feeds/luci/luci.mk|' \
       "./package/${pkg}/Makefile"
@@ -243,7 +241,6 @@ import_3proxy() {
 }
 
 import_istore() {
-  # Official package name is luci-app-store (+ taskd / luci-lib-*).
   echo "Importing iStore (luci-app-store)..."
   remove_matches "luci-app-store"
   remove_matches "luci-lib-taskd"
@@ -266,11 +263,6 @@ import_istore() {
 }
 
 import_minigate() {
-  # PKG_NAME is minigate (PROVIDES luci-app-minigate).
-  # Upstream DEPENDS:=+nginx-ssl +nginx-mod-stream causes Kconfig recursion:
-  #   PACKAGE_minigate depends on PACKAGE_nginx-ssl
-  #   PACKAGE_nginx-ssl is selected by PACKAGE_minigate
-  # Strip those hard deps here; enable nginx-* in general-packages.config instead.
   echo "Importing minigate..."
   clone_direct "minigate" "tpxcer/minigate" "main"
   if [ ! -f ./package/minigate/Makefile ]; then
@@ -287,6 +279,38 @@ import_minigate() {
   echo "minigate import completed (nginx hard-deps removed)."
 }
 
+import_istorex() {
+  # iStoreX home UI from kenzok8/small-package
+  # luci-app-istorex -> luci-app-quickstart + luci-app-store + luci-lib-taskd
+  # luci-app-quickstart -> quickstart + luci-app-ttyd
+  echo "Importing iStoreX (quickstart + luci-app-quickstart + luci-app-istorex)..."
+  remove_matches "luci-app-istorex"
+  remove_matches "luci-app-quickstart"
+  remove_matches "quickstart"
+  local tmp name
+  tmp="$(mktemp -d)"
+  git clone --depth=1 --single-branch --branch main --filter=blob:none --sparse \
+    https://github.com/kenzok8/small-package.git "$tmp/smp"
+  git -C "$tmp/smp" sparse-checkout set \
+    quickstart luci-app-quickstart luci-app-istorex
+  for name in quickstart luci-app-quickstart luci-app-istorex; do
+    if [ ! -f "$tmp/smp/$name/Makefile" ]; then
+      echo "ERROR: kenzok8/small-package missing $name/Makefile" >&2
+      exit 1
+    fi
+    cp -a "$tmp/smp/$name" "./package/$name"
+  done
+  for name in luci-app-quickstart luci-app-istorex; do
+    if grep -q 'include ../../luci.mk' "./package/$name/Makefile" 2>/dev/null; then
+      sed -i 's|include ../../luci.mk|include $(TOPDIR)/feeds/luci/luci.mk|' \
+        "./package/$name/Makefile"
+    fi
+  done
+  record_commit kenzok8/small-package-istorex "$tmp/smp"
+  rm -rf "$tmp"
+  echo "iStoreX import completed."
+}
+
 echo "Importing third-party packages used by the GENERAL package set..."
 
 import_openclash
@@ -298,11 +322,12 @@ import_autoreboot
 import_passwall
 import_3proxy
 
-# Extra apps requested for OpenWrt 25
+# Extra apps for OpenWrt 25
 import_nested_luci_app "luci-app-taskplan" "sirpdboy/luci-app-taskplan" "main"
 import_nested_luci_app "luci-app-run" "wukongdaily/luci-app-run" "master"
 import_minigate
 import_istore
+import_istorex
 
 python3 "$(dirname "$0")/integrate-temperature.py" .
 
