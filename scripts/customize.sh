@@ -27,21 +27,41 @@ clone_direct() {
   record_commit "$repo" "./package/${target}"
 }
 
+import_nested_luci_app() {
+  # Clone a repo whose OpenWrt package lives in a subdirectory named $1.
+  local pkg="$1"
+  local repo="$2"
+  local branch="$3"
+  local tmp src
+  tmp="$(mktemp -d)"
+  remove_matches "$pkg"
+  git clone --depth=1 --single-branch --branch "$branch" \
+    "https://github.com/${repo}.git" "$tmp/src"
+  src="$(find "$tmp/src" -maxdepth 3 -type d -name "$pkg" | head -n1)"
+  if [ -z "$src" ] || [ ! -f "$src/Makefile" ]; then
+    echo "ERROR: $pkg/Makefile not found in ${repo}" >&2
+    exit 1
+  fi
+  cp -a "$src" "./package/${pkg}"
+  # Normalize relative luci.mk include when present
+  if grep -q 'include ../../luci.mk' "./package/${pkg}/Makefile" 2>/dev/null; then
+    sed -i 's|include ../../luci.mk|include $(TOPDIR)/feeds/luci/luci.mk|' \
+      "./package/${pkg}/Makefile"
+  fi
+  record_commit "$repo" "$tmp/src"
+  rm -rf "$tmp"
+}
+
 import_footstrap() {
   local tmp
   tmp="$(mktemp -d)"
   remove_matches "footstrap"
-
-  # The upstream repository contains the OpenWrt package one directory below
-  # its root, so it cannot be imported with clone_direct().
   git clone --depth=1 --single-branch --branch main \
     https://github.com/VizzleTF/luci-theme-footstrap.git "$tmp/footstrap"
-
   if [ ! -f "$tmp/footstrap/luci-theme-footstrap/Makefile" ]; then
     echo "ERROR: luci-theme-footstrap Makefile not found"
     exit 1
   fi
-
   cp -a "$tmp/footstrap/luci-theme-footstrap" ./package/luci-theme-footstrap
   record_commit VizzleTF/luci-theme-footstrap "$tmp/footstrap"
   rm -rf "$tmp"
@@ -51,25 +71,20 @@ import_openclash() {
   local tmp
   tmp="$(mktemp -d)"
   remove_matches "openclash"
-
   git clone --depth=1 --single-branch --branch dev \
     https://github.com/vernesong/OpenClash.git "$tmp/OpenClash"
-
   local src
   src="$(find "$tmp/OpenClash" -maxdepth 3 -type d -name 'luci-app-openclash' | head -n1)"
   if [ -z "$src" ]; then
     echo "ERROR: luci-app-openclash directory not found in vernesong/OpenClash"
     exit 1
   fi
-
   cp -a "$src" ./package/luci-app-openclash
   record_commit vernesong/OpenClash "$tmp/OpenClash"
   rm -rf "$tmp"
 }
 
 import_viking_packages() {
-  # Bingoguo/VIKINGYFY packages provide GecoosAC and the WOL LuCI app.
-  # The WOL package was renamed from luci-app-wolplus to luci-app-wolultra.
   local tmp name
   tmp="$(mktemp -d)"
   remove_matches "gecoosac"
@@ -77,10 +92,6 @@ import_viking_packages() {
   remove_matches "luci-app-wolultra"
   remove_matches "luci-app-timewol"
   rm -rf ./package/viking-packages
-
-  # Import only the requested applications and GecoosAC's runtime dependency.
-  # Other repository packages (notably HomeProxy/sing-box) override pinned feeds
-  # and can introduce Kconfig cycles even when they are not selected.
   git clone --depth=1 --single-branch --branch main --filter=blob:none --sparse \
     https://github.com/VIKINGYFY/packages.git "$tmp/packages"
   git -C "$tmp/packages" sparse-checkout set \
@@ -107,7 +118,6 @@ import_autoreboot() {
     https://github.com/immortalwrt/luci.git "$tmp/luci"
   git -C "$tmp/luci" sparse-checkout set applications/luci-app-autoreboot
   cp -a "$tmp/luci/applications/luci-app-autoreboot" ./package/luci-app-autoreboot
-  # Normalize the feed-relative include for a directly imported package.
   sed -i 's|include ../../luci.mk|include $(TOPDIR)/feeds/luci/luci.mk|' \
     ./package/luci-app-autoreboot/Makefile
   record_commit immortalwrt/luci-autoreboot "$tmp/luci"
@@ -115,13 +125,10 @@ import_autoreboot() {
 }
 
 import_airoha_npu() {
-  # The former bingoguo93/luci-app-airoha-npu endpoint is no longer public.
-  # Pin to a known public upstream revision supporting AN7581 and AN7583.
   local repo="rchen14b/luci-app-airoha-npu"
   local revision="14521b8414da1e98517a295d8ec267087c7dde8e"
   local dest="./package/luci-app-airoha-npu"
   local required
-
   remove_matches "luci-app-airoha-npu"
   git init -q "$dest"
   git -C "$dest" remote add origin "https://github.com/${repo}.git"
@@ -131,7 +138,6 @@ import_airoha_npu() {
   fi
   git -C "$dest" fetch --depth=1 origin "$revision"
   git -C "$dest" -c advice.detachedHead=false checkout --detach FETCH_HEAD
-
   for required in \
     Makefile \
     htdocs/luci-static/resources/view/airoha_npu/status.js \
@@ -147,16 +153,12 @@ import_airoha_npu() {
     echo "ERROR: pinned Airoha NPU package Makefile is not feed-compatible" >&2
     exit 1
   fi
-  # Drop the author's older nested packaging template to avoid duplicate scans.
   rm -rf -- "$dest/luci-app-airoha-npu"
   record_commit "$repo" "$dest"
 }
 
 import_passwall() {
-  # Official Passwall: replace feed/ImmortalWrt copies with matched luci + packages.
-  # Do NOT remove smartdns here — this CI enables luci-app-smartdns.
   echo "Importing official Passwall..."
-
   rm -rf \
     feeds/packages/net/xray-core \
     feeds/packages/net/v2ray-geodata \
@@ -216,15 +218,12 @@ import_passwall() {
     echo "ERROR: passwall-luci does not contain luci-app-passwall Makefile" >&2
     exit 1
   fi
-
   record_commit Openwrt-Passwall/openwrt-passwall-packages ./package/passwall-packages
   record_commit Openwrt-Passwall/openwrt-passwall ./package/passwall-luci
   echo "Official Passwall import completed."
 }
 
 import_3proxy() {
-  # luci-app-3cat depends on 3proxy-mod-tcppm / 3proxy-mod-udppm.
-  # Locked packages feed often has no net/3proxy; pull from ImmortalWrt packages.
   echo "Importing 3proxy for luci-app-3cat..."
   remove_matches "3proxy"
   local tmp
@@ -243,6 +242,29 @@ import_3proxy() {
   echo "3proxy import completed."
 }
 
+import_istore() {
+  # Official package name is luci-app-store (+ taskd / luci-lib-*).
+  echo "Importing iStore (luci-app-store)..."
+  remove_matches "luci-app-store"
+  remove_matches "luci-lib-taskd"
+  remove_matches "luci-lib-xterm"
+  remove_matches "taskd"
+  local tmp
+  tmp="$(mktemp -d)"
+  git clone --depth=1 --single-branch --branch main \
+    https://github.com/istoreos/istore.git "$tmp/istore"
+  for name in luci-app-store luci-lib-taskd luci-lib-xterm taskd; do
+    if [ ! -f "$tmp/istore/luci/$name/Makefile" ]; then
+      echo "ERROR: istore missing luci/$name/Makefile" >&2
+      exit 1
+    fi
+    cp -a "$tmp/istore/luci/$name" "./package/$name"
+  done
+  record_commit istoreos/istore "$tmp/istore"
+  rm -rf "$tmp"
+  echo "iStore import completed."
+}
+
 echo "Importing third-party packages used by the GENERAL package set..."
 
 import_openclash
@@ -254,23 +276,20 @@ import_autoreboot
 import_passwall
 import_3proxy
 
-# Connect autocore to the pinned LuCI feed before package metadata is generated.
+# Extra apps requested for OpenWrt 25
+import_nested_luci_app "luci-app-taskplan" "sirpdboy/luci-app-taskplan" "main"
+import_nested_luci_app "luci-app-run" "wukongdaily/luci-app-run" "master"
+clone_direct "minigate" "tpxcer/minigate" "main"
+import_istore
+
 python3 "$(dirname "$0")/integrate-temperature.py" .
 
-# This unselected audio package has a circular codec dependency with this
-# source/feed snapshot. Exclude only its installed feed symlink so the
-# Kconfig parser can load a clean menu; no requested firmware package uses it.
 if [ -L ./package/feeds/packages/squeezelite ]; then
   rm ./package/feeds/packages/squeezelite
 fi
 
-# The pinned packages feed retains an unused MPD Kconfig self-cycle and
-# libevdev's input-support feature guard blocks libudev-zero / usbutils.
-# Passwall must already be imported above; adjust-feed-packages must NOT
-# list luci-app-passwall in UNUSED_LUCI_CYCLES.
 python3 "$(dirname "$0")/adjust-feed-packages.py" .
 
-# Force package metadata to be regenerated after adding/removing package trees.
 rm -rf ./tmp
 
 echo "Third-party package import completed."
