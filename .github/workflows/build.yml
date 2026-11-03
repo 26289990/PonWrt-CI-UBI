@@ -205,12 +205,55 @@ jobs:
           make -j"$(nproc)" V=s BUILD_LOG=1 2>&1 | tee logs/build.log
       - name: Validate every device image and collect firmware
         run: bash scripts/collect.sh openwrt "output/$SUBTARGET" "$SUBTARGET" build-plan/catalog.json
+      - name: Collect optional APK packages (=m modules)
+        run: |
+          set -euo pipefail
+          arch="$(find openwrt/bin/packages -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | head -n1 || true)"
+          mkdir -p "output/$SUBTARGET/packages"
+          if [ -n "${arch:-}" ] && [ -d "openwrt/bin/packages/$arch" ]; then
+            # Prefer packages you set to =m; fall back to copying the whole feed tree if names differ.
+            for name in \
+              luci-app-store luci-lib-taskd luci-lib-xterm taskd \
+              quickstart luci-app-quickstart luci-app-istorex luci-app-ttyd \
+              luci-theme-argon \
+              bash shadow-utils parted mdadm lsblk block-mount e2fsprogs
+            do
+              find "openwrt/bin/packages/$arch" -type f \( -name "${name}_*.apk" -o -name "${name}-*.apk" \) \
+                -exec cp -a {} "output/$SUBTARGET/packages/" \; || true
+            done
+            # Also keep a full packages tree snapshot (small extra) for missing deps.
+            if [ -z "$(ls -A "output/$SUBTARGET/packages" 2>/dev/null || true)" ]; then
+              cp -a "openwrt/bin/packages/$arch/." "output/$SUBTARGET/packages/" || true
+            fi
+            (
+              cd "output/$SUBTARGET"
+              if [ -n "$(ls -A packages 2>/dev/null || true)" ]; then
+                tar -czf "packages-${arch}.tar.gz" packages
+                echo "Packed packages-${arch}.tar.gz"
+                ls -lh "packages-${arch}.tar.gz"
+              else
+                echo "WARNING: no APK packages collected for $SUBTARGET"
+              fi
+            )
+          else
+            echo "WARNING: openwrt/bin/packages not found; skip APK collect"
+          fi
       - name: Upload validated firmware
         uses: actions/upload-artifact@v6
         with:
           name: PonWrt-firmware-${{ matrix.subtarget }}
           path: output/${{ matrix.subtarget }}/
           if-no-files-found: error
+          retention-days: 14
+      - name: Upload optional APK packages
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: PonWrt-packages-${{ matrix.subtarget }}
+          path: |
+            output/${{ matrix.subtarget }}/packages/
+            output/${{ matrix.subtarget }}/packages-*.tar.gz
+          if-no-files-found: ignore
           retention-days: 14
       - name: Upload configuration and diagnostics
         if: always()
@@ -247,10 +290,42 @@ jobs:
           pattern: PonWrt-firmware-*
           path: output
           merge-multiple: true
+      - name: Download optional APK package sets
+        uses: actions/download-artifact@v7
+        with:
+          pattern: PonWrt-packages-*
+          path: packages-artifacts
+          merge-multiple: true
+        continue-on-error: true
+      - name: Merge packages into output for release
+        run: |
+          set -euo pipefail
+          mkdir -p output/packages
+          if [ -d packages-artifacts ]; then
+            find packages-artifacts -type f \( -name '*.apk' -o -name 'packages-*.tar.gz' \) \
+              -exec cp -a {} output/packages/ \; || true
+            if [ -n "$(ls -A output/packages 2>/dev/null || true)" ]; then
+              (cd output && tar -czf packages-optional.tar.gz packages && ls -lh packages-optional.tar.gz)
+            else
+              echo "No APK files found to attach"
+            fi
+          else
+            echo "No package artifacts downloaded"
+          fi
       - name: Check complete coverage and write release notes
         run: |
           python3 scripts/release-notes.py output build-plan/catalog.json release-notes.md
           cp build-plan/catalog.json output/device-catalog.json
+          if [ -f output/packages-optional.tar.gz ]; then
+            {
+              echo ""
+              echo "## Optional packages (CONFIG_PACKAGE_*=m)"
+              echo ""
+              echo "Extra APK modules not baked into the firmware rootfs:"
+              echo "- \`packages-optional.tar.gz\` — extract then \`apk add --allow-untrusted ./*.apk\`"
+              echo ""
+            } >> release-notes.md
+          fi
       - name: Publish firmware release
         env:
           GH_TOKEN: ${{ github.token }}
