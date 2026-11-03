@@ -23,7 +23,7 @@ uhttpd-mod-ubus
 uhttpd-mod-ucode
 luci-app-gecoosac
 luci-app-samba4
-luci-app-wolultra
+#luci-app-wolultra
 luci-app-airoha-npu
 dnsmasq-full
 bash
