@@ -12,11 +12,11 @@ luci-proto-ipv6
 luci-proto-ppp
 luci-app-attendedsysupgrade
 kmod-tun
-luci-app-openclash
-luci-app-lucky
+#luci-app-openclash
+#luci-app-lucky
 luci-theme-footstrap
 luci-i18n-base-zh-cn
-luci-i18n-lucky-zh-cn
+#luci-i18n-lucky-zh-cn
 luci-i18n-upnp-zh-cn
 uhttpd
 uhttpd-mod-ubus
