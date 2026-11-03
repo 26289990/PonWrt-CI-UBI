@@ -29,6 +29,10 @@ CATALOG = {
     "profile_count": 4,
 }
 
+# Always pick a package that remains in required-packages.txt after optional
+# apps (openclash/lucky/wolultra/...) were removed from the mandatory list.
+REQUIRED_APP = "luci-app-airoha-npu"
+
 
 class ConfigChecks(unittest.TestCase):
     def setUp(self):
@@ -59,7 +63,7 @@ class ConfigChecks(unittest.TestCase):
 
     def test_required_application_cannot_be_module_only(self):
         self.assertTrue(self.validate(self.config.replace(
-            "CONFIG_PACKAGE_luci-app-openclash=y", "CONFIG_PACKAGE_luci-app-openclash=m")))
+            f"CONFIG_PACKAGE_{REQUIRED_APP}=y", f"CONFIG_PACKAGE_{REQUIRED_APP}=m")))
 
     def test_wrong_soc_firmware_is_rejected(self):
         self.assertTrue(self.validate(self.config.replace(
@@ -95,7 +99,7 @@ class IdentityChecks(unittest.TestCase):
         self.assertTrue(self.validate())
 
     def test_missing_required_application_is_rejected(self):
-        del self.packages["luci-app-lucky"]
+        del self.packages[REQUIRED_APP]
         self.assertTrue(self.validate())
 
 
@@ -108,7 +112,7 @@ class ImageExtractionChecks(unittest.TestCase):
         self.root = pathlib.Path(self.tmp.name)
         db = self.root / "fs/lib/apk/db/installed"
         db.parent.mkdir(parents=True)
-        db.write_text("P:luci-app-openclash\nV:0.47\n\nP:kmod-device-radio\nV:6.12\n\n")
+        db.write_text(f"P:{REQUIRED_APP}\nV:0.47\n\nP:kmod-device-radio\nV:6.12\n\n")
         self.squashfs = self.root / "rootfs"
         subprocess.run(["mksquashfs", str(self.root / "fs"), str(self.squashfs),
                         "-noappend", "-processors", "1", "-comp", "gzip"],
@@ -130,7 +134,7 @@ class ImageExtractionChecks(unittest.TestCase):
         return image
 
     def test_fit_reads_real_installed_database(self):
-        self.assertEqual({"luci-app-openclash": "0.47", "kmod-device-radio": "6.12"},
+        self.assertEqual({REQUIRED_APP: "0.47", "kmod-device-radio": "6.12"},
                          image_packages(self.fit()))
 
     def test_out_of_bounds_fit_is_rejected(self):
@@ -145,7 +149,7 @@ class ImageExtractionChecks(unittest.TestCase):
             tar.addfile(info, io.BytesIO(self.data))
         with image.open("ab") as stream:
             stream.write(b"fwtool-metadata-footer")
-        self.assertEqual("0.47", image_packages(image)["luci-app-openclash"])
+        self.assertEqual("0.47", image_packages(image)[REQUIRED_APP])
 
     def test_duplicate_tar_roots_are_rejected(self):
         image = self.root / "duplicate.bin"
