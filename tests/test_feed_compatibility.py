@@ -21,7 +21,9 @@ class FeedCompatibilityChecks(unittest.TestCase):
             source = pathlib.Path(tmp)
             links = source / "package/feeds/luci"
             links.mkdir(parents=True)
-            for name in (*patches.UNUSED_LUCI_CYCLES, "luci-app-openclash"):
+            # Keep a non-excluded app link to prove only UNUSED_LUCI_CYCLES are dropped.
+            keep_name = "luci-app-airoha-npu"
+            for name in (*patches.UNUSED_LUCI_CYCLES, keep_name):
                 package = source / "feeds/luci/applications" / name
                 package.mkdir(parents=True)
                 (package / "Makefile").write_text("preserve package source\n")
@@ -31,7 +33,7 @@ class FeedCompatibilityChecks(unittest.TestCase):
             for name in patches.UNUSED_LUCI_CYCLES:
                 self.assertFalse((links / name).is_symlink())
                 self.assertTrue((source / "feeds/luci/applications" / name / "Makefile").is_file())
-            self.assertTrue((links / "luci-app-openclash").is_symlink())
+            self.assertTrue((links / keep_name).is_symlink())
 
     def test_luci_exclusion_refuses_real_directories_before_removing_links(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -46,8 +48,10 @@ class FeedCompatibilityChecks(unittest.TestCase):
             self.assertTrue(first.is_symlink())
 
     def test_luci_exclusion_cannot_remove_requested_application(self):
+        # Must use a package that remains in required-packages.txt after optional
+        # apps (openclash, lucky, wolultra, ...) are removed from the mandatory list.
         with tempfile.TemporaryDirectory() as tmp:
-            with mock.patch.object(patches, "UNUSED_LUCI_CYCLES", ("luci-app-openclash",)):
+            with mock.patch.object(patches, "UNUSED_LUCI_CYCLES", ("luci-app-airoha-npu",)):
                 with self.assertRaisesRegex(ValueError, "Cannot exclude requested"):
                     patches.exclude_unused_luci_cycles(pathlib.Path(tmp))
 
