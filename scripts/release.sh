@@ -35,7 +35,16 @@ if [[ "$mode" == prepare ]]; then
   printf 'release_tag=%s\n' "$TAG" >> "$GITHUB_OUTPUT"
 else
   BUILD_DATE="$(TZ=Asia/Shanghai date +'%Y.%m.%d-%H%M')"
-  gh release create "$TAG" output/* \
+  # GitHub release assets must be files, never directories.
+  # Collect only regular files under output/ (firmware, sums, notes, packages-*.tar.gz).
+  mapfile -t assets < <(find output -maxdepth 1 -type f | sort)
+  if [ "${#assets[@]}" -eq 0 ]; then
+    echo "ERROR: no release files found under output/" >&2
+    exit 1
+  fi
+  printf 'Publishing %d file(s):\n' "${#assets[@]}"
+  printf '  %s\n' "${assets[@]}"
+  gh release create "$TAG" "${assets[@]}" \
     --repo "$GITHUB_REPOSITORY" --verify-tag \
     --title "PonWrt all PON devices ${BUILD_DATE}" \
     --notes-file release-notes.md --latest
