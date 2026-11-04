@@ -1,0 +1,13 @@
+#!/bin/sh
+# First-boot: set system timezone to Asia/Shanghai (CST, UTC+8)
+
+uci -q batch <<EOF
+set system.@system[0].zonename='Asia/Shanghai'
+set system.@system[0].timezone='CST-8'
+commit system
+EOF
+
+# Reload so the change applies without reboot if procd is already up
+/etc/init.d/system reload 2>/dev/null || true
+
+exit 0
