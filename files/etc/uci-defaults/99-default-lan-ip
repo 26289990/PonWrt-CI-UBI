@@ -1,0 +1,8 @@
+#!/bin/sh
+
+uci -q batch <<-EOF
+	set network.lan.ipaddr='192.168.68.1/24'
+	commit network
+EOF
+
+exit 0
