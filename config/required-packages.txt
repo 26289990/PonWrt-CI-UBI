@@ -10,7 +10,7 @@ luci-app-package-manager
 luci-ssl
 luci-proto-ipv6
 luci-proto-ppp
-luci-app-attendedsysupgrade
+#luci-app-attendedsysupgrade
 kmod-tun
 #luci-app-openclash
 #luci-app-lucky
