@@ -1,5 +1,6 @@
 #!/bin/sh
 # First-boot: unbind lan1 from br-lan, bind WAN to lan1 (instead of pon0).
+# Use network restart + wan ifup so DHCP works without a full device reboot.
 
 . /lib/functions.sh
 
@@ -20,28 +21,21 @@ remove_lan1_from_bridges() {
 		new="${new:+$new }$p"
 	done
 
-	# Only rewrite when lan1 was actually present
 	if [ "$new" != "$ports" ]; then
-		if [ -n "$new" ]; then
-			uci -q delete "network.$section.ports"
-			for p in $new; do
-				uci -q add_list "network.$section.ports=$p"
-			done
-		else
-			uci -q delete "network.$section.ports"
-		fi
+		uci -q delete "network.$section.ports"
+		for p in $new; do
+			uci -q add_list "network.$section.ports=$p"
+		done
 	fi
 }
 
 config_load network
 config_foreach remove_lan1_from_bridges device
 
-# --- 2) Point WAN at lan1 (replace pon0 / any previous device) ---
-# Prefer the logical interface named "wan"; fall back to first interface with proto dhcp/pppoe if needed.
+# --- 2) Point WAN / WAN6 at lan1 ---
 if uci -q get network.wan >/dev/null 2>&1; then
 	uci -q set network.wan.device='lan1'
 else
-	# No section named wan: create a minimal DHCP WAN on lan1
 	uci -q batch <<EOF
 set network.wan=interface
 set network.wan.proto='dhcp'
@@ -49,14 +43,22 @@ set network.wan.device='lan1'
 EOF
 fi
 
-# If there is a separate wan6, keep it on the same L2 device
 if uci -q get network.wan6 >/dev/null 2>&1; then
 	uci -q set network.wan6.device='lan1'
 fi
 
 uci -q commit network
 
-# Apply once if network is already up (safe on first boot too)
-/etc/init.d/network reload 2>/dev/null || true
+# Bridge port moves need a full network restart; reload is often not enough.
+sleep 2
+/etc/init.d/network restart 2>/dev/null || true
+
+# Give netifd a moment, then force WAN to renew DHCP on lan1.
+sleep 3
+ifdown wan 2>/dev/null || true
+ifdown wan6 2>/dev/null || true
+sleep 1
+ifup wan 2>/dev/null || true
+ifup wan6 2>/dev/null || true
 
 exit 0
