@@ -1,13 +1,29 @@
 #!/bin/sh
-# First-boot: set system timezone to Asia/Shanghai (CST, UTC+8)
+# First-boot: Dropbear listen on all interfaces (LuCI: 未指定)
 
-uci -q batch <<EOF
-set system.@system[0].zonename='Asia/Shanghai'
-set system.@system[0].timezone='CST-8'
-commit system
-EOF
+# Wait until dropbear UCI exists (image may create it slightly later)
+n=0
+while [ ! -f /etc/config/dropbear ] && [ "$n" -lt 30 ]; do
+	sleep 1
+	n=$((n + 1))
+done
+[ -f /etc/config/dropbear ] || exit 0
 
-# Reload so the change applies without reboot if procd is already up
-/etc/init.d/system reload 2>/dev/null || true
+. /lib/functions.sh
+
+clear_iface() {
+	local s="$1"
+	# Single option or list: delete until gone
+	while uci -q delete "dropbear.$s.Interface"; do :; done
+}
+
+config_load dropbear
+config_foreach clear_iface dropbear
+
+uci -q commit dropbear
+
+sleep 1
+/etc/init.d/dropbear stop 2>/dev/null || true
+/etc/init.d/dropbear start 2>/dev/null || true
 
 exit 0
