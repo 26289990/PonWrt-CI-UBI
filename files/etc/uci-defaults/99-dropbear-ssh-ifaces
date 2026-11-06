@@ -1,0 +1,15 @@
+#!/bin/sh
+# First-boot: Dropbear SSH listen on all interfaces (LuCI shows 未指定)
+
+i=0
+while uci -q get "dropbear.@dropbear[$i]" >/dev/null 2>&1; do
+	# Remove Interface=lan (or any binding) so it listens on all addresses
+	uci -q delete "dropbear.@dropbear[$i].Interface"
+	i=$((i + 1))
+done
+
+uci -q commit dropbear
+
+/etc/init.d/dropbear restart 2>/dev/null || true
+
+exit 0
