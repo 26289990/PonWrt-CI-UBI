@@ -1,0 +1,17 @@
+#!/bin/sh
+# First-boot: install bundled APKs (OpenWrt 25 apk), then remove APKs
+# Script itself is removed by the system after exit 0
+
+DIR=/etc/uci-defaults/prebuilt-apks
+
+if [ -d "$DIR" ]; then
+	for f in "$DIR"/*.apk; do
+		[ -f "$f" ] || continue
+		# 本地包：不访问网络 + 允许未签名 + 必要时覆盖同名文件
+		apk add --no-network --allow-untrusted --force-overwrite "$f" 2>/dev/null || \
+		apk add --allow-untrusted --force-overwrite "$f" 2>/dev/null || true
+	done
+	rm -rf "$DIR"
+fi
+
+exit 0
