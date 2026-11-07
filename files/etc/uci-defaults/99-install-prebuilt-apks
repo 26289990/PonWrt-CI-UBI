@@ -1,17 +1,40 @@
 #!/bin/sh
-# First-boot: install bundled APKs (OpenWrt 25 apk), then remove APKs
-# Script itself is removed by the system after exit 0
+# First-boot: install prebuilt APKs after a short delay; keep files if install fails
 
 DIR=/etc/uci-defaults/prebuilt-apks
+LOG=/tmp/prebuilt-apks.log
 
-if [ -d "$DIR" ]; then
-	for f in "$DIR"/*.apk; do
-		[ -f "$f" ] || continue
-		# 本地包：不访问网络 + 允许未签名 + 必要时覆盖同名文件
-		apk add --no-network --allow-untrusted --force-overwrite "$f" 2>/dev/null || \
-		apk add --allow-untrusted --force-overwrite "$f" 2>/dev/null || true
-	done
+# 等系统/apk 就绪
+sleep 15
+
+if [ ! -d "$DIR" ]; then
+	logger -t prebuilt-apks "missing $DIR"
+	echo "missing $DIR" > "$LOG"
+	exit 0
+fi
+
+count=0
+fail=0
+for f in "$DIR"/*.apk; do
+	[ -f "$f" ] || continue
+	count=$((count + 1))
+	echo "INSTALL $f" >> "$LOG"
+	if apk add --allow-untrusted --force-overwrite "$f" >> "$LOG" 2>&1; then
+		logger -t prebuilt-apks "OK $(basename "$f")"
+	else
+		fail=$((fail + 1))
+		logger -t prebuilt-apks "FAIL $(basename "$f")"
+	fi
+done
+
+echo "count=$count fail=$fail" >> "$LOG"
+logger -t prebuilt-apks "count=$count fail=$fail"
+
+# 全部成功才删除；有失败则保留 apk 方便排查
+if [ "$count" -gt 0 ] && [ "$fail" -eq 0 ]; then
 	rm -rf "$DIR"
+else
+	logger -t prebuilt-apks "keep $DIR for debug"
 fi
 
 exit 0
