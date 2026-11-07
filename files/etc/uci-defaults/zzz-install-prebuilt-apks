@@ -1,9 +1,10 @@
 #!/bin/sh
+# First-boot: install fixed-name local APKs (no globs), offline, keep log/APKs on failure
+
 DIR=/etc/uci-defaults/prebuilt-apks
 LOG=/tmp/prebuilt-apks.log
 
-sleep 20
-
+sleep 15
 echo "start $(date)" > "$LOG"
 
 if [ ! -d "$DIR" ]; then
@@ -12,31 +13,44 @@ if [ ! -d "$DIR" ]; then
 	exit 0
 fi
 
-ls -la "$DIR" >> "$LOG" 2>&1
+# 全名，不用通配符（按依赖顺序）
+set -- \
+	"$DIR"/v2ray-geoip-202609040655.1.apk \
+	"$DIR"/v2ray-geosite-202609072354.1.apk \
+	"$DIR"/daed-2026.09.24-r2-aarch64_cortex-a53.apk \
+	"$DIR"/luci-app-daede-1.15-r6.apk
 
-count=0
-fail=0
-for f in "$DIR"/*.apk; do
-	[ -f "$f" ] || continue
-	count=$((count + 1))
-	echo "INSTALL $f" >> "$LOG"
-	if /usr/bin/apk add --allow-untrusted --force-overwrite "$f" >> "$LOG" 2>&1; then
-		logger -t prebuilt-apks "OK $(basename "$f")"
-	else
-		fail=$((fail + 1))
-		logger -t prebuilt-apks "FAIL $(basename "$f")"
+files=
+for f in "$@"; do
+	if [ ! -f "$f" ]; then
+		echo "skip missing: $f" >> "$LOG"
+		continue
 	fi
+	files="$files $f"
 done
 
-echo "count=$count fail=$fail" >> "$LOG"
-logger -t prebuilt-apks "count=$count fail=$fail"
+if [ -z "$files" ]; then
+	echo "no apk files present" >> "$LOG"
+	logger -t prebuilt-apks "no apk files"
+	exit 0
+fi
 
-# 成功才删；失败保留 apk 和 log
-if [ "$count" -gt 0 ] && [ "$fail" -eq 0 ]; then
+echo "INSTALL$files" >> "$LOG"
+ls -la $files >> "$LOG" 2>&1
+
+# 强制不联网 + 允许未签名 + 覆盖冲突
+# --force-broken-world：依赖/世界集合不完整时仍尽量装（若当前 apk 不支持会忽略或报错，可再去掉）
+if apk add --no-network --allow-untrusted --force-overwrite --force-broken-world $files >> "$LOG" 2>&1 \
+	|| apk add --no-network --allow-untrusted --force-overwrite $files >> "$LOG" 2>&1
+then
+	echo "OK $(date)" >> "$LOG"
+	logger -t prebuilt-apks "OK"
 	rm -rf "$DIR"
 	echo "removed $DIR" >> "$LOG"
 else
-	echo "keep $DIR" >> "$LOG"
+	echo "FAIL $(date)" >> "$LOG"
+	logger -t prebuilt-apks "FAIL, keep $DIR and $LOG"
+	# 失败：不删 APK，方便你 cat /tmp/prebuilt-apks.log 排查
 fi
 
 exit 0
