@@ -17,7 +17,7 @@ fi
 set -- \
 	"$DIR"/v2ray-geoip-202609040655.1.apk \
 	"$DIR"/v2ray-geosite-202609072354.1.apk \
-	"$DIR"/daed-2026.09.24-r2-aarch64_cortex-a53.apk \
+	"$DIR"/daed-router-0.6.76-aarch64_cortex-a53.apk \
 	"$DIR"/luci-app-daed-router-0.6.76.apk
 
 files=
