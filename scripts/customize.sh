@@ -290,7 +290,7 @@ import_istorex() {
   echo "iStoreX import completed."
 }
 
-# Break luci-app-fwknopd <-> fwknopd <-> FWKNOPD_GPG Kconfig cycle
+# Break luci-app-fwknopd <-> fwknopd <-> FWKNOPD_GPG / gnupg2 Kconfig cycles
 patch_fwknop_kconfig_cycle() {
   local f
   echo "Patching fwknop Kconfig cycle..."
@@ -301,6 +301,8 @@ patch_fwknop_kconfig_cycle() {
     [ -f "$f" ] || continue
     sed -i 's/depends on PACKAGE_fwknopd || PACKAGE_fwknop//' "$f"
     sed -i 's/depends on PACKAGE_fwknopd//' "$f"
+    sed -i 's/select PACKAGE_gnupg2//' "$f"
+    sed -i 's/select PACKAGE_gnupg//' "$f"
     echo "  patched $f"
   done
   for f in \
@@ -309,6 +311,8 @@ patch_fwknop_kconfig_cycle() {
   do
     [ -f "$f" ] || continue
     sed -i 's/+FWKNOPD_GPG//g' "$f"
+    sed -i 's/+gnupg2//g' "$f"
+    sed -i 's/+gnupg//g' "$f"
     echo "  patched $f"
   done
 }
@@ -335,6 +339,9 @@ fi
 
 # Must run before adjust-feed-packages / tmp regeneration
 patch_fwknop_kconfig_cycle
+
+# Not used in general-packages; drop from Kconfig to avoid gnupg2/libfko cycles
+rm -f package/feeds/luci/luci-app-fwknopd 2>/dev/null || true
 
 python3 "$(dirname "$0")/adjust-feed-packages.py" .
 rm -rf ./tmp
