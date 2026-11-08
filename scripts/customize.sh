@@ -1,34 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 # This script runs inside the cloned PonWrt source tree, after feeds install.
 # Keep NAND/UBI layout untouched; only add runtime packages here.
 : > ./custom-package-commits.tsv
-
 record_commit() {
   printf '%s\t%s\n' "$1" "$(git -C "$2" rev-parse HEAD)" >> ./custom-package-commits.tsv
 }
-
 remove_matches() {
   local pattern="$1"
   find ./package ./feeds/luci ./feeds/packages \
     -maxdepth 4 -type d -iname "*${pattern}*" 2>/dev/null \
     -print -exec rm -rf {} + || true
 }
-
 clone_direct() {
   local target="$1"
   local repo="$2"
   local branch="$3"
-
   remove_matches "$target"
   git clone --depth=1 --single-branch --branch "$branch" \
     "https://github.com/${repo}.git" "./package/${target}"
   record_commit "$repo" "./package/${target}"
 }
-
 import_nested_luci_app() {
-  # Clone a repo whose OpenWrt package lives in a subdirectory named $1.
   local pkg="$1"
   local repo="$2"
   local branch="$3"
@@ -43,7 +36,6 @@ import_nested_luci_app() {
     exit 1
   fi
   cp -a "$src" "./package/${pkg}"
-  # Normalize relative luci.mk include when present
   if grep -q 'include ../../luci.mk' "./package/${pkg}/Makefile" 2>/dev/null; then
     sed -i 's|include ../../luci.mk|include $(TOPDIR)/feeds/luci/luci.mk|' \
       "./package/${pkg}/Makefile"
@@ -51,7 +43,6 @@ import_nested_luci_app() {
   record_commit "$repo" "$tmp/src"
   rm -rf "$tmp"
 }
-
 import_footstrap() {
   local tmp
   tmp="$(mktemp -d)"
@@ -66,7 +57,6 @@ import_footstrap() {
   record_commit VizzleTF/luci-theme-footstrap "$tmp/footstrap"
   rm -rf "$tmp"
 }
-
 import_openclash() {
   local tmp
   tmp="$(mktemp -d)"
@@ -83,7 +73,6 @@ import_openclash() {
   record_commit vernesong/OpenClash "$tmp/OpenClash"
   rm -rf "$tmp"
 }
-
 import_viking_packages() {
   local tmp name
   tmp="$(mktemp -d)"
@@ -109,7 +98,6 @@ import_viking_packages() {
   record_commit VIKINGYFY/packages "$tmp/packages"
   rm -rf "$tmp"
 }
-
 import_autoreboot() {
   local tmp
   tmp="$(mktemp -d)"
@@ -123,7 +111,6 @@ import_autoreboot() {
   record_commit immortalwrt/luci-autoreboot "$tmp/luci"
   rm -rf "$tmp"
 }
-
 import_airoha_npu() {
   local repo="rchen14b/luci-app-airoha-npu"
   local revision="14521b8414da1e98517a295d8ec267087c7dde8e"
@@ -156,7 +143,6 @@ import_airoha_npu() {
   rm -rf -- "$dest/luci-app-airoha-npu"
   record_commit "$repo" "$dest"
 }
-
 import_passwall() {
   echo "Importing official Passwall..."
   rm -rf \
@@ -200,14 +186,12 @@ import_passwall() {
     package/passwall-luci \
     package/passwall-packages \
     2>/dev/null || true
-
   git clone --depth=1 --single-branch --branch main \
     https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git \
     ./package/passwall-packages
   git clone --depth=1 --single-branch --branch main \
     https://github.com/Openwrt-Passwall/openwrt-passwall.git \
     ./package/passwall-luci
-
   if [ ! -f ./package/passwall-packages/Makefile ] \
     && [ -z "$(find ./package/passwall-packages -maxdepth 2 -name Makefile | head -n1)" ]; then
     echo "ERROR: passwall-packages looks empty or invalid" >&2
@@ -222,7 +206,6 @@ import_passwall() {
   record_commit Openwrt-Passwall/openwrt-passwall ./package/passwall-luci
   echo "Official Passwall import completed."
 }
-
 import_3proxy() {
   echo "Importing 3proxy for luci-app-3cat..."
   remove_matches "3proxy"
@@ -241,9 +224,7 @@ import_3proxy() {
   rm -rf "$tmp"
   echo "3proxy import completed."
 }
-
 import_istore() {
-  # Official package name is luci-app-store (+ taskd / luci-lib-*).
   echo "Importing iStore (luci-app-store)..."
   remove_matches "luci-app-store"
   remove_matches "luci-lib-taskd"
@@ -264,13 +245,7 @@ import_istore() {
   rm -rf "$tmp"
   echo "iStore import completed."
 }
-
 import_minigate() {
-  # PKG_NAME is minigate (PROVIDES luci-app-minigate).
-  # Upstream DEPENDS:=+nginx-ssl +nginx-mod-stream causes Kconfig recursion:
-  #   PACKAGE_minigate depends on PACKAGE_nginx-ssl
-  #   PACKAGE_nginx-ssl is selected by PACKAGE_minigate
-  # Strip those hard deps here; enable nginx-* in general-packages.config instead.
   echo "Importing minigate..."
   clone_direct "minigate" "tpxcer/minigate" "main"
   if [ ! -f ./package/minigate/Makefile ]; then
@@ -286,9 +261,63 @@ import_minigate() {
   fi
   echo "minigate import completed (nginx hard-deps removed)."
 }
+import_istorex() {
+  echo "Importing iStoreX (quickstart + luci-app-quickstart + luci-app-istorex)..."
+  remove_matches "luci-app-istorex"
+  remove_matches "luci-app-quickstart"
+  remove_matches "quickstart"
+  local tmp name
+  tmp="$(mktemp -d)"
+  git clone --depth=1 --single-branch --branch main --filter=blob:none --sparse \
+    https://github.com/kenzok8/small-package.git "$tmp/smp"
+  git -C "$tmp/smp" sparse-checkout set \
+    quickstart luci-app-quickstart luci-app-istorex
+  for name in quickstart luci-app-quickstart luci-app-istorex; do
+    if [ ! -f "$tmp/smp/$name/Makefile" ]; then
+      echo "ERROR: kenzok8/small-package missing $name/Makefile" >&2
+      exit 1
+    fi
+    cp -a "$tmp/smp/$name" "./package/$name"
+  done
+  for name in luci-app-quickstart luci-app-istorex; do
+    if grep -q 'include ../../luci.mk' "./package/$name/Makefile" 2>/dev/null; then
+      sed -i 's|include ../../luci.mk|include $(TOPDIR)/feeds/luci/luci.mk|' \
+        "./package/$name/Makefile"
+    fi
+  done
+  record_commit kenzok8/small-package-istorex "$tmp/smp"
+  rm -rf "$tmp"
+  echo "iStoreX import completed."
+}
+
+# Break luci-app-fwknopd <-> fwknopd <-> FWKNOPD_GPG / gnupg2 Kconfig cycles
+patch_fwknop_kconfig_cycle() {
+  local f
+  echo "Patching fwknop Kconfig cycle..."
+  for f in \
+    feeds/packages/net/fwknop/Config.in \
+    package/feeds/packages/fwknop/Config.in
+  do
+    [ -f "$f" ] || continue
+    sed -i 's/depends on PACKAGE_fwknopd || PACKAGE_fwknop//' "$f"
+    sed -i 's/depends on PACKAGE_fwknopd//' "$f"
+    sed -i 's/select PACKAGE_gnupg2//' "$f"
+    sed -i 's/select PACKAGE_gnupg//' "$f"
+    echo "  patched $f"
+  done
+  for f in \
+    feeds/luci/applications/luci-app-fwknopd/Makefile \
+    package/feeds/luci/luci-app-fwknopd/Makefile
+  do
+    [ -f "$f" ] || continue
+    sed -i 's/+FWKNOPD_GPG//g' "$f"
+    sed -i 's/+gnupg2//g' "$f"
+    sed -i 's/+gnupg//g' "$f"
+    echo "  patched $f"
+  done
+}
 
 echo "Importing third-party packages used by the GENERAL package set..."
-
 import_openclash
 clone_direct "luci-app-lucky" "sirpdboy/luci-app-lucky" "main"
 import_viking_packages
@@ -297,21 +326,23 @@ import_footstrap
 import_autoreboot
 import_passwall
 import_3proxy
-
-# Extra apps requested for OpenWrt 25
+# Extra apps for OpenWrt 25
 import_nested_luci_app "luci-app-taskplan" "sirpdboy/luci-app-taskplan" "main"
 import_nested_luci_app "luci-app-run" "wukongdaily/luci-app-run" "master"
 import_minigate
 import_istore
-
+import_istorex
 python3 "$(dirname "$0")/integrate-temperature.py" .
-
 if [ -L ./package/feeds/packages/squeezelite ]; then
   rm ./package/feeds/packages/squeezelite
 fi
 
+# Must run before adjust-feed-packages / tmp regeneration
+patch_fwknop_kconfig_cycle
+
+# Not used in general-packages; drop from Kconfig to avoid gnupg2/libfko cycles
+rm -f package/feeds/luci/luci-app-fwknopd 2>/dev/null || true
+
 python3 "$(dirname "$0")/adjust-feed-packages.py" .
-
 rm -rf ./tmp
-
 echo "Third-party package import completed."
